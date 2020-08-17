@@ -6,25 +6,21 @@
  * Author: Jorie Sieck
  * Author URI: http://www.globalcognition.org
 */
-global $ta_report_section_headers;
-$ta_report_section_headers = array(
-	"Username",
-	"Name",
-	"Last Login Time",
-	"Completed",
-	"Memory",
-	"Technical Reading",
-	"Taking Notes",
-	"Time Management",
-	"Test Taking",
-	"Final Challenge"
-);
+
+// don't load if accessed directly or gutenberg unavailable
+defined('ABSPATH') || exit;
+if(!function_exists('register_block_type')) {
+	return;
+}
+
 global $ta_report_csv_headers;
 $ta_report_csv_headers = array(
 	"Username",
 	"Name",
 	"Last Login",
 	"Percent Complete",
+	"Final Challenge Score",
+	"Final Challenge Attempts",
 	"Memory Quiz Score",
 	"Memory Quiz Attempts",
 	"Technical Reading Quiz Score",
@@ -34,16 +30,8 @@ $ta_report_csv_headers = array(
 	"Time Management Quiz Score",
 	"Time Management Quiz Attempts",
 	"Test Taking Quiz Score",
-	"Test Taking Quiz Attempts",
-	"Final Challenge Score",
-	"Final Challenge Attempts"
+	"Test Taking Quiz Attempts"
 );
-global $ta_course_id;
-$ta_course_id = "4192";	// the id of the course post
-global $ta_quiz_slugs;
-$ta_quiz_slugs = array("memory-section-quiz","ares-section-quiz","taking-notes-section-quiz","test-taking-section-quiz","test-taking-section-quiz-2","final-challenge");
-global $ta_quiz_ids;	// see if can do with slugs on live
-$ta_quiz_ids = array(6400,6407,6413,6418,6423,6429);
 
 /*
  * store last user login time in the format "August 12, 2020, 8:48 pm UTC"
@@ -56,47 +44,45 @@ function ta_store_last_login($login,$user) {
 /*
  * generate the user data for a given user
 */
-function ta_generate_user_data($user,$user_id) {
-	global $ta_course_id;
-	global $ta_quiz_slugs;
-	global $ta_quiz_ids;
-	$total_course_steps = learndash_get_course_steps_count($ta_course_id);
+function ta_generate_user_data($user,$user_id,$course_id) {
+	$total_course_steps = learndash_get_course_steps_count($course_id);
 
 	// get last login time
 	$last_login_time = get_user_meta($user_id,'last_login_time',true);
-	// because wp doesn't save last login time, this function won't work for users who do not log in inbetween plugin activation & reports accessing
+	// because wp doesn't save last login time, this function won't work for users who do not log in in between plugin activation & reports accessing
 
 	// get percent complete
-	$percent_complete = round((learndash_course_get_completed_steps($user_id,$ta_course_id) / $total_course_steps) * 100,0);
+	$percent_complete = round((learndash_course_get_completed_steps($user_id,$course_id) / $total_course_steps) * 100,0);
+
+	$all_lessons = learndash_get_lesson_list($course_id);
+	$quiz_ids = array();
+	foreach($all_lessons as $lesson) {
+		$quizzes = learndash_get_lesson_quiz_list($lesson);
+		if($quizzes) {
+			array_push($quiz_ids,$quizzes[1]['post']->ID);
+		}
+	}
+	array_push($quiz_ids,learndash_get_global_quiz_list($course_id)[0]->ID);
 
 	// get list of quizzes
-	$quizzes_completed = learndash_get_user_quiz_attempt($user_id,$ta_course_id);
-	// for each quiz, log the most recent score & number of attempts
+	$quizzes_completed = learndash_get_user_quiz_attempt($user_id,$course_id);
 	$quiz_data = array();
+	// for each quiz, log the most recent score & number of attempts
 	foreach($quizzes_completed as $quiz) {
 		$quiz_id = $quiz['quiz'];
 		$quiz_data[$quiz_id]['score'] = $quiz['percentage'];
 		$quiz_data[$quiz_id]['attempts'] += 1;
 	}
 	// fill in any incomplete quizzes
-	foreach($ta_quiz_ids as $quiz_id) {
+	foreach($quiz_ids as $quiz_id) {
 		if(!$quiz_data[$quiz_id]) {
 			$quiz_data[$quiz_id]['score'] = 'N/A';
 			$quiz_data[$quiz_id]['attempts'] = 0;
 		}
 	}
-	// foreach($quiz_data as $quiz_id) {
-	// 	// $quiz = get_page_by_path($quiz_slug);	// throws an error
-	// 	// if(!$quiz) {
-	// 	// 	echo "Error: {$quiz_slug} does not exist.";
-	// 	// 	continue;
-	// 	// }
-	// 	// $quiz_id = $quiz->ID;
-	// 	if(in_array($quiz_id,$quizzes_completed)) {
-	// 		$quiz_data[$quiz_id]['score'] = $quizzes_completed[$quiz_id]['percentage'];
-	// 		$quiz_data[$quiz_id]['attempts'] += 1;
-	// 	}
-	// }
+
+	// sort the data by quiz id (assumes quizzes were created in order)
+	krsort($quiz_data);
 
 	// organize the data for easy access in js
 	$user_data = array(
@@ -122,31 +108,40 @@ function ta_generate_download_button() {
 /*
  * generate user data
 */
-function ta_reports_get_user_data($user,$user_id) {
+function ta_reports_get_user_data($user,$user_id,$course_id = NULL) {
+	if(!$course_id) {
+		$course_id = learndash_get_last_active_course($user_id);
+	}
 	// check for sponsored members & get list
 	$sponsored_members = pmprosm_getChildren($user_id);
 	$users_data = array();
 	if($sponsored_members) {
 		// generate user data for each sponsored member
-		foreach($sponsored_members as $student_id) {
-			$student = get_user_by("id",$student_id);
-			$users_data[$student_id] = ta_generate_user_data($student,$student_id);
+		foreach($sponsored_members as $student_id_str) {
+			$student_id = intval($student_id_str);
+			if(learndash_user_get_enrolled_courses($student_id)) {
+				$student = get_user_by("id",$student_id);
+				if(!$course_id) {
+					$course_id = learndash_get_last_active_course($student_id);
+				}
+				$users_data[$student_id] = ta_generate_user_data($student,$student_id,$course_id);
+			}
+
 		}
 	} else {
 		// generate user data for current user only
-		$users_data[$user_id] = ta_generate_user_data($user,$user_id);
+		$users_data[$user_id] = ta_generate_user_data($user,$user_id,$course_id);
 	}
+
 	return $users_data;
 }
 
 /*
  * get the necessary data and send to javascript
 */
-// add_action('wp_enqueue_scripts','ta_get_report_data');
-// add_action('genesis_entry_content','ta_get_report_data');
-add_shortcode('ta_reports_table','ta_get_report_data');
+add_action('wp_enqueue_scripts','ta_get_report_data');
 function ta_get_report_data() {
-	// if(is_page(6240)) {
+	if(is_page('study-skills-report')) {
 		global $current_user;
 		// make sure user is logged in
 		if($current_user->ID) {
@@ -154,31 +149,41 @@ function ta_get_report_data() {
 			wp_enqueue_script(
         'tarep-main-js',
         plugins_url('/assets/js/main.js', __FILE__),
-        ['wp-element', 'wp-components', 'jquery'],
+        ['wp-blocks', 'wp-element', 'wp-components', 'jquery'],
         time(),
         true
       );
 
 			// add button and anchor div
-			ta_generate_download_button();
-			echo '<div class="ta-rep-anchor"></div>';
+			add_action('genesis_before_entry_content','ta_generate_download_button');
 
 			// get data
-			global $ta_report_section_headers;
-			global $ta_course_id;
-			$total_course_steps = learndash_get_course_steps_count($ta_course_id);
-			$course_sections = learndash_30_get_course_sections($ta_course_id);
 			$user = $current_user;
 			$user_id = $user->ID;
+			$course_id = learndash_get_last_active_course($user_id);
+			if($course_id==0) {
+				$course_id = learndash_get_last_active_course(pmprosm_getChildren($user_id)[1]);
+			}
+			$course_sections = learndash_30_get_course_sections($course_id);
+
+			$section_titles = array(
+				"Username",
+				"Name",
+				"Last Login",
+				"Percent Complete",
+				"Final Challenge"
+			);
+			foreach ($course_sections as $section) {
+				array_push($section_titles,$section->post_title);
+			}
 
 			// generate user data
-			$users_data = ta_reports_get_user_data($user,$user_id);
+			$users_data = ta_reports_get_user_data($user,$user_id,$course_id);
 
 			// prep data
 			$report_data = array(
-				"sectionHeaders" => $ta_report_section_headers,
+				"sectionHeaders" => $section_titles,
 				"usersData" => $users_data,
-				"isSponsor" => count($sponsored_members)
 			);
 
 			// send data to main.js
@@ -186,7 +191,7 @@ function ta_get_report_data() {
 		} else {
 			echo "Please log in";
 		}
-	// }
+	}
 }
 
 /*
@@ -262,6 +267,7 @@ function ta_send_report_data($csv_file,$filename,$headers) {
 add_action('wp_ajax_ta_download_report_csv','ta_download_report_csv');
 function ta_download_report_csv() {
 	global $ta_report_csv_headers;
+	global $current_user;
 
 	// set headers
 	$headers = array();
@@ -287,6 +293,8 @@ function ta_download_report_csv() {
 				// escape any commas and append
 				$user_row .= str_replace(',','',$cell) . ',';
 			} else {
+				// reverse scores
+				ksort($cell);
 				// flatten the scores array and append
 				foreach($cell as $score_attempts) {
 					$user_row .= implode(',',$score_attempts) . ',';

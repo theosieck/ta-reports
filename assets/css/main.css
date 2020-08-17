@@ -1,14 +1,9 @@
-/* change this after you figure out insertion */
-.page-id-6574 .content {
-	width: 100%;
-}
-.page-id-6574 .site-inner {
-	max-width: none !important;
-	margin: 0 !important;
-}
-
 .MuiTable-root-1 {
 	margin-top: 5px !important;
+	margin-left: -180px !important;
+	margin-right: -180px !important;
+	max-width: 1140px !important;
+	width: 1140px !important;
 }
 
 .MuiTableRow-head-6,
@@ -40,6 +35,7 @@
 	font-weight: 600 !important;
 	text-transform: none !important;
 	padding: 5px 10px !important;
+	margin-left: -160px !important;
 }
 
 .ta-download-button:focus,
