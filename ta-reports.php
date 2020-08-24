@@ -19,8 +19,6 @@ $ta_report_csv_headers = array(
 	"Name",
 	"Last Login",
 	"Percent Complete",
-	"Final Challenge Score",
-	"Final Challenge Attempts",
 	"Memory Quiz Score",
 	"Memory Quiz Attempts",
 	"Technical Reading Quiz Score",
@@ -30,71 +28,10 @@ $ta_report_csv_headers = array(
 	"Time Management Quiz Score",
 	"Time Management Quiz Attempts",
 	"Test Taking Quiz Score",
-	"Test Taking Quiz Attempts"
+	"Test Taking Quiz Attempts",
+	"Final Challenge Score",
+	"Final Challenge Attempts"
 );
-
-/*
- * store last user login time in the format "August 12, 2020, 8:48 pm UTC"
-*/
-add_action('wp_login','ta_store_last_login',0,2);
-function ta_store_last_login($login,$user) {
-	update_user_meta($user->ID,'last_login_time',date('F j, Y, g:i a T'));
-}
-
-/*
- * generate the user data for a given user
-*/
-function ta_generate_user_data($user,$user_id,$course_id) {
-	$total_course_steps = learndash_get_course_steps_count($course_id);
-
-	// get last login time
-	$last_login_time = get_user_meta($user_id,'last_login_time',true);
-	// because wp doesn't save last login time, this function won't work for users who do not log in in between plugin activation & reports accessing
-
-	// get percent complete
-	$percent_complete = round((learndash_course_get_completed_steps($user_id,$course_id) / $total_course_steps) * 100,0);
-
-	$all_lessons = learndash_get_lesson_list($course_id);
-	$quiz_ids = array();
-	foreach($all_lessons as $lesson) {
-		$quizzes = learndash_get_lesson_quiz_list($lesson);
-		if($quizzes) {
-			array_push($quiz_ids,$quizzes[1]['post']->ID);
-		}
-	}
-	array_push($quiz_ids,learndash_get_global_quiz_list($course_id)[0]->ID);
-
-	// get list of quizzes
-	$quizzes_completed = learndash_get_user_quiz_attempt($user_id,$course_id);
-	$quiz_data = array();
-	// for each quiz, log the most recent score & number of attempts
-	foreach($quizzes_completed as $quiz) {
-		$quiz_id = $quiz['quiz'];
-		$quiz_data[$quiz_id]['score'] = $quiz['percentage'];
-		$quiz_data[$quiz_id]['attempts'] += 1;
-	}
-	// fill in any incomplete quizzes
-	foreach($quiz_ids as $quiz_id) {
-		if(!$quiz_data[$quiz_id]) {
-			$quiz_data[$quiz_id]['score'] = 'N/A';
-			$quiz_data[$quiz_id]['attempts'] = 0;
-		}
-	}
-
-	// sort the data by quiz id (assumes quizzes were created in order)
-	krsort($quiz_data);
-
-	// organize the data for easy access in js
-	$user_data = array(
-		"username" => $user->user_login,
-		"name" => $user->display_name,
-		"lastLogin" => $last_login_time ? $last_login_time : 'No recorded login time',
-		"percentComplete" => $percent_complete,
-		"quizData" => $quiz_data
-	);
-
-	return $user_data;
-}
 
 /*
  * button to download as csv
@@ -106,31 +43,82 @@ function ta_generate_download_button() {
 }
 
 /*
+ * generate the user data for a given user
+*/
+function ta_generate_user_data($course_id,$total_course_steps,$user,$user_id,$quiz_data,$enrolled = false) {
+	// get last login time from pmpro
+	$last_login_time = get_user_meta($user_id,'pmpro_logins',true)['last'];
+
+	// for enrolled users only
+	if($enrolled) {
+		// get percent complete
+		$percent_complete = round((learndash_course_get_completed_steps($user_id,$course_id) / $total_course_steps) * 100,0);
+
+		// for each quiz, log the most recent score & number of attempts
+		$quizzes_completed = learndash_get_user_quiz_attempt($user_id,$course_id);
+		$quiz_keys = array_keys($quiz_data);
+		foreach($quizzes_completed as $quiz) {
+			$quiz_id = $quiz['quiz'];
+			if(in_array($quiz_id,$quiz_keys)) {
+				$quiz_data[$quiz_id]['score'] = $quiz['percentage'];
+				$quiz_data[$quiz_id]['attempts'] += 1;
+			}
+		}
+	}
+
+	// sort the data by quiz id (assumes quizzes were created in order)
+	// krsort($quiz_data);
+	//
+	// d($quiz_data);
+
+	// organize the data for easy access in js
+	$user_data = array(
+		"username" => $user->user_login,
+		"name" => $user->display_name,
+		"lastLogin" => $last_login_time ? $last_login_time : 'No recorded login time',
+		"percentComplete" => $percent_complete ? $percent_complete : 0,
+		"quizData" => $quiz_data
+	);
+
+	return $user_data;
+}
+
+/*
  * generate user data
 */
-function ta_reports_get_user_data($user,$user_id,$course_id = NULL) {
-	if(!$course_id) {
-		$course_id = learndash_get_last_active_course($user_id);
+function ta_reports_get_user_data($user,$user_id,$course_id) {
+	// get total course steps
+	$total_course_steps = learndash_get_course_steps_count($course_id);
+
+	// get list of quizzes
+	global $wpdb;
+	$post_table_name = $wpdb->prefix . 'posts';
+	// $sql = "SELECT `ID` FROM `{$post_table_name}` WHERE (`post_title` = 'Section Quiz' OR `post_title` = 'Final Challenge') AND `post_type` = 'sfwd-quiz' AND  `post_status` =  'publish'";
+	$sql = "SELECT `ID` FROM `{$post_table_name}` WHERE (`post_title` = 'Section Quiz') AND `post_type` = 'sfwd-quiz' AND  `post_status` =  'publish'";
+	$quiz_ids = $wpdb->get_results($sql, 'ARRAY_N');
+	// add final challenge at end
+	$sql = "SELECT `ID` FROM `{$post_table_name}` WHERE (`post_title` = 'Final Challenge') AND `post_type` = 'sfwd-quiz' AND  `post_status` =  'publish'";
+	$quiz_ids = array_merge($quiz_ids,$wpdb->get_results($sql, 'ARRAY_N'));
+
+	// fill in with dummy data
+	$quiz_data = array();
+	foreach($quiz_ids as $quiz) {
+		$quiz_id = $quiz[0];
+		$quiz_data[$quiz_id]['score'] = 'N/A';
+		$quiz_data[$quiz_id]['attempts'] = 0;
 	}
+
 	// check for sponsored members & get list
 	$sponsored_members = pmprosm_getChildren($user_id);
-	$users_data = array();
-	if($sponsored_members) {
-		// generate user data for each sponsored member
-		foreach($sponsored_members as $student_id_str) {
-			$student_id = intval($student_id_str);
-			if(learndash_user_get_enrolled_courses($student_id)) {
-				$student = get_user_by("id",$student_id);
-				if(!$course_id) {
-					$course_id = learndash_get_last_active_course($student_id);
-				}
-				$users_data[$student_id] = ta_generate_user_data($student,$student_id,$course_id);
-			}
+	$sponsored_members[] = $user_id;	// include self in report
 
-		}
-	} else {
-		// generate user data for current user only
-		$users_data[$user_id] = ta_generate_user_data($user,$user_id,$course_id);
+	$users_data = array();
+	// generate user data for each sponsored member
+	foreach($sponsored_members as $student_id_str) {
+		$student_id = intval($student_id_str);
+		$student = get_user_by("id",$student_id);
+		$enrolled = learndash_user_get_enrolled_courses($student_id)!=0;
+		$users_data[$student_id] = ta_generate_user_data($course_id,$total_course_steps,$student,$student_id,$quiz_data,$enrolled);
 	}
 
 	return $users_data;
@@ -161,8 +149,8 @@ function ta_get_report_data() {
 			$user = $current_user;
 			$user_id = $user->ID;
 			$course_id = learndash_get_last_active_course($user_id);
-			if($course_id==0) {
-				$course_id = learndash_get_last_active_course(pmprosm_getChildren($user_id)[1]);
+			if(!$course_id) {
+				$course_id = 4192;
 			}
 			$course_sections = learndash_30_get_course_sections($course_id);
 
@@ -170,12 +158,12 @@ function ta_get_report_data() {
 				"Username",
 				"Name",
 				"Last Login",
-				"Percent Complete",
-				"Final Challenge"
+				"Percent Complete"
 			);
 			foreach ($course_sections as $section) {
 				array_push($section_titles,$section->post_title);
 			}
+			array_push($section_titles,"Final Challenge");	// final challenge goes at the end
 
 			// generate user data
 			$users_data = ta_reports_get_user_data($user,$user_id,$course_id);
@@ -281,7 +269,13 @@ function ta_download_report_csv() {
 	$csv_headers = implode(',',$ta_report_csv_headers) . "\n";
 
 	// generate user data
-	$users = ta_reports_get_user_data($current_user,$current_user->ID);
+	$user = $current_user;
+	$user_id = $user->ID;
+	$course_id = learndash_get_last_active_course($user_id);
+	if(!$course_id) {
+		$course_id = 4192;
+	}
+	$users = ta_reports_get_user_data($user,$user_id,$course_id);
 	$csv_rows = "";
 	// loop over user data & generate csv row for each
 	foreach($users as $user) {
@@ -294,7 +288,7 @@ function ta_download_report_csv() {
 				$user_row .= str_replace(',','',$cell) . ',';
 			} else {
 				// reverse scores
-				ksort($cell);
+				// ksort($cell);
 				// flatten the scores array and append
 				foreach($cell as $score_attempts) {
 					$user_row .= implode(',',$score_attempts) . ',';

@@ -43,10 +43,16 @@ class Reports extends Component {
 	*/
 	collapseScores = (rowArray,scoresObj) => {
 		const keys = Object.keys(scoresObj);
-		keys.forEach((key) => {
-			rowArray.push(scoresObj[key]['score']);
-			rowArray.push(scoresObj[key]['attempts']);
+		console.log(keys);
+		keys.forEach((key,i) => {
+			if(i>0) {
+				rowArray.push(scoresObj[key]['score']);
+				rowArray.push(scoresObj[key]['attempts']);
+			}
 		});
+		// essentially move the final challenge key to the end
+		rowArray.push(scoresObj[keys[0]]['score']);
+		rowArray.push(scoresObj[keys[0]]['attempts']);
 		return rowArray;
 	}
 
