@@ -1,45 +1,125 @@
-.MuiTable-root-1 {
+/* overall table styles */
+.MuiPaper-root {
 	margin-top: 5px !important;
 	margin-left: -180px !important;
 	margin-right: -180px !important;
-	max-width: 1140px !important;
+	max-width: none !important;
 	width: 1140px !important;
+	white-space: nowrap !important;
+	color: #444 !important;	/* body color for the site */
 }
 
-.MuiTableRow-head-6,
-.MuiTableRow-root-3 {
-	height: 20px !important;
+/* toolbar icons */
+.MuiToolbar-gutters {
+	padding-left: 5px !important;
+}
+/* home button */
+.ta-home-button.MuiButton-text {
+	display: block !important;
+	min-width: 0 !important;
+	color: #444 !important;
+}
+.MTableToolbar-title-9 {
+	margin-left: 10px !important;
 }
 
-.MuiTableCell-head-9 {
-	color: black !important;
-	font-size: 12px !important;
-	font-weight: 700 !important;
+/* download menu */
+/* make the dropdown smaller */
+.MuiMenu-paper.MuiPopover-paper {
+	max-width: 122px !important;	/* label is 90 + 16px padding on either side */
+}
+/* don't show the 'download as PDF' option, since it doesn't work anyway
+ 	 don't show the sorting icon, it fucks with the layout and is barely functional */
+.MuiMenu-list .MuiMenuItem-root:last-child,
+.MuiTableSortLabel-icon {
+	display: none !important;
+}
+
+/* table cells */
+.MuiTableCell-root:not(.MuiIconButton-root):not(.Component-paginationRoot-1) {
+	padding: 5px !important;
+	font-size: 18px !important;
+	font-family: "PT Sans", sans-serif !important;
 	text-align: center !important;
+	width: 200px !important;
+}
+.Component-horizontalScrollContainer-12 .MuiTableCell-root:nth-child(1),
+.Component-horizontalScrollContainer-12 .MuiTableCell-root:nth-child(2),
+.Component-horizontalScrollContainer-12 .MuiTableCell-root:nth-child(3) {
+	width: 120px !important;
 }
 
-.MuiTableCell-root-8 {
-	padding: 2px !important;
-	font-size: 12px !important;
-	text-align: center !important;
-}
-
-
-.ta-download-button {
-	border-radius: 3px !important;
-	-moz-border-radius: 3px !important;
-	-webkit-border-radius: 3px !important;
-	background-color: var(--super-dark-gray) !important;
-	color: var(--white) !important;
-	font-size: 12px !important;
+/* header */
+.MuiTableCell-head {
 	font-weight: 600 !important;
-	text-transform: none !important;
-	padding: 5px 10px !important;
-	margin-left: -160px !important;
 }
 
-.ta-download-button:focus,
-.ta-download-button:hover {
-	background-color: #0073e5 !important;
-	color: #fff !important;
+/* subtitle */
+.MuiPaper-root .sub {
+	display: flex !important;
+	flex-direction: row !important;
+	justify-content: space-around !important;
+}
+.MuiPaper-root .sub span:first-of-type {
+	padding-right: 20px;
+}
+.MuiTableCell-head .sub {
+	padding-top: 5px;
+}
+
+/* data container */
+.Component-horizontalScrollContainer-12 .MuiTable-root {
+	margin: 5px !important;
+}
+
+/*
+
+.MuiTableSortLabel-root div {
+	width: 200px !important;
+} */
+
+/* disabled buttons */
+.Mui-disabled {
+	background-color: inherit !important;
+	color: #ddd !important;
+}
+
+/* keep text color on hover */
+.MuiIconButton-root:hover {
+	color: inherit !important;
+}
+
+/* pagination */
+.MuiTypography-caption {
+	font-size: 18px !important;
+	color: #444 !important;
+}
+
+/* mobile styling */
+@media only screen and (max-width:1139px) {
+	/* make table full-width */
+	.MuiPaper-root {
+		margin-left: 0 !important;
+		margin-right: 0 !important;
+		width: 100% !important;
+	}
+	/* preserve username column width */
+	.Component-horizontalScrollContainer-12 div div div:nth-child(2) {
+		width: 120px !important;
+	}
+	/* less space between toolbar items */
+	.MTableToolbar-spacer-7 {
+		display: none !important;
+	}
+	.MTableToolbar-searchField-10 {
+		padding-left: 10px !important;
+		width: 80% !important;
+	}
+	.MTableToolbar-title-9 {
+		margin: 0 !important;
+	}
+	/* pagination toolbar */
+	.MuiTablePagination-toolbar {
+		flex-direction: column;
+	}
 }
